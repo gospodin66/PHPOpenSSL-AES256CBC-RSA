@@ -9,32 +9,33 @@ class AES256CBC_RSA {
     private const CRYPTO_HASH_ALGO_512 = 'sha512';
     private const KEYS_DIR = './keys';
 
-    public function fetch_AESCBC_key() : string {
+    public function fetch_AES_CBC_key() : string {
         try {
             if(file_exists('.env') === false){
                 echo "AES key not found.. Created new key.\n";
                 $key = base64_encode(openssl_random_pseudo_bytes(32));
                 if(false === file_put_contents('.env', $key)){
-                    echo 'Error saving AES key.';
-                    return "";
+                    echo "Error saving AES key.\n";
+                    $key = "";
                 }
             } else { 
                 if(($key = file_get_contents(".env")) === false){
-                    echo 'Error reading AES key.';
-                    return "";
+                    echo "Error reading AES key.\n";
+                    $key = "";
                 }
             }
         } catch(\Throwable $e) {
-            throw $e;
+            echo "Fetch AES CBC key error: {$e->getMessage()}\n";
+            $key = "";
         }
         return $key;
     }
 
-    public function generate_RSA_keypair(string $user = 'master') : string {
+    public function generate_RSA_keypair(string $user = 'master') : bool {
         $private_path = self::KEYS_DIR."/$user/private.pem";
         $public_path  = self::KEYS_DIR."/$user/public.pem";
-        $privateKeyString = file_exists($private_path) ? file_get_contents($private_path) : null;
-        $publicKeyString  = file_exists($public_path)  ? file_get_contents($public_path)  : null;
+        $privateKeyString = file_exists($private_path) ? file_get_contents($private_path) : "";
+        $publicKeyString  = file_exists($public_path)  ? file_get_contents($public_path)  : "";
         // generate keypair if !exists
         if(empty($privateKeyString) || empty($publicKeyString))
         {
@@ -48,14 +49,14 @@ class AES256CBC_RSA {
             $publicKeyString = $keyDetails["key"];
             if( ! file_exists(self::KEYS_DIR."/$user")){
                 if( ! mkdir(self::KEYS_DIR."/$user", 0755, true)){
-                    echo "mkdir() user-dir error.";
+                    echo "mkdir() user-dir error.\n";
                     return false;
                 }
             }
             if(file_put_contents($private_path, $privateKeyString) === false
              || file_put_contents($public_path, $publicKeyString) === false)
             {
-                echo "Keypair store error.";
+                echo "Keypair store error.\n";
                 return false;
             }
         }
@@ -65,19 +66,17 @@ class AES256CBC_RSA {
     private function get_RSA_keypair(string $user = 'master', string $passphrase) : array {
         $private_path = self::KEYS_DIR."/$user/private.pem";
         $public_path  = self::KEYS_DIR."/$user/public.pem";
-        $privateKeyString = file_exists($private_path) ? trim(file_get_contents($private_path)) : null;
-        $publicKeyString  = file_exists($public_path)  ? trim(file_get_contents($public_path))  : null;
+        $privateKeyString = file_exists($private_path) ? trim(file_get_contents($private_path)) : "";
+        $publicKeyString  = file_exists($public_path)  ? trim(file_get_contents($public_path))  : "";
         if(empty($privateKeyString) || empty($publicKeyString)) {
             echo "Empty key strings.\n";
             return [];
         }
         if(false === ($publicKey = openssl_pkey_get_public([$publicKeyString, $passphrase]))) {
-            echo "Malformed public key.\n";
-            return [];
+            echo "Malformed public key!\n";
         }
         if(false === ($privateKey = openssl_pkey_get_private([$privateKeyString, $passphrase]))) {
-            echo "Malformed private key.\n";
-            return [];
+            echo "Malformed private key!\n";
         }
         return ['public' => $publicKey, 'private' => $privateKey];
     }
@@ -85,12 +84,8 @@ class AES256CBC_RSA {
     public function get_RSA_keypair_strings(string $user = 'master') : array {
         $private_path = self::KEYS_DIR."/$user/private.pem";
         $public_path  = self::KEYS_DIR."/$user/public.pem";
-        $privateKeyString = file_exists($private_path) ? trim(file_get_contents($private_path)) : null;
-        $publicKeyString  = file_exists($public_path)  ? trim(file_get_contents($public_path))  : null;
-        if(empty($privateKeyString) || empty($publicKeyString)){
-            echo "Empty key strings.\n";
-            return [];
-        }
+        $privateKeyString = file_exists($private_path) ? trim(file_get_contents($private_path)) : "";
+        $publicKeyString  = file_exists($public_path)  ? trim(file_get_contents($public_path))  : "";
         return ['public' => $publicKeyString, 'private' => $privateKeyString];
     }
 
@@ -112,23 +107,20 @@ class AES256CBC_RSA {
                 echo "Error encrypting with public key.\n";
                 return "";
             }
-            openssl_free_key($keypair['public']);
         } else if($keytype === 'private'){
             if(false === openssl_private_encrypt($data, $encryptedWithPrivate, $keypair['private'])) {
                 echo "Error encrypting with private key.\n";
                 return "";
             }
-            openssl_free_key($keypair['private']);
         } else {
             echo "Invalid key type.\n";
             return "";
         }
-        unset($data);
         return (($keytype === 'public')
                 ? base64_encode($encryptedWithPublic)
                 : (($keytype === 'private')
                 ? base64_encode($encryptedWithPrivate)
-                : false)); 
+                : "")); 
     }
 
     /**
@@ -150,13 +142,11 @@ class AES256CBC_RSA {
                 echo "Error decrypting with public key what was encrypted with private key\n";
                 return "";
             }
-            openssl_free_key($keypair['public']);
         } else if($keytype === 'private'){
             if(false === openssl_private_decrypt($encrypted, $decrtypted, $keypair['private'])) {
                 echo "Error decrypting with private key what was encrypted with public key\n";
                 return "";
             }
-            openssl_free_key($keypair['private']);
         } else {
             echo "Invalid key type.\n";
             return "";
@@ -166,7 +156,7 @@ class AES256CBC_RSA {
 
 
     public function encrypt_cbc(string $clrtext, string $key = "") : string {
-        if(($base64key = self::fetch_AESCBC_key()) === null){
+        if(($base64key = self::fetch_AES_CBC_key()) === null){
             echo "Error fetching key.\n";
             return "";
         }
@@ -178,18 +168,18 @@ class AES256CBC_RSA {
             $hmac = hash_hmac(self::HASH_ALGO, $iv.$ciphertext, $key, true);
             return base64_encode($iv.$hmac.$ciphertext);
         } catch (\Throwable $e){
-            throw $e;
+            echo "Encrypt CBC error: {$e->getMessage()}\n";
         }
         return "";
     }
 
     public function decrypt_cbc($encrypted){
-        if(($base64key = self::fetch_AESCBC_key()) === null){
-            echo "Error fetching key.\n";
+        if(empty($encrypted)){
+            echo "Invalid/Empty cyphertext.\n";
             return "";
         }
-        if(empty($encrypted)){
-            echo "Invalid cyphertext.\n";
+        if(($base64key = self::fetch_AES_CBC_key()) === null){
+            echo "Error fetching key.\n";
             return "";
         }
         $key = base64_decode($base64key);
@@ -216,7 +206,7 @@ class AES256CBC_RSA {
             }
             return "";
         } catch (\Throwable $e){
-            throw $e;
+            echo "Decrypt CBC error: {$e->getMessage()}\n";
         }
         return "";
     }
