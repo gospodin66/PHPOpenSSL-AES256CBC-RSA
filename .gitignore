@@ -1,2 +1,2 @@
-keys/
-.env
+RSA-keys/
+.aes256cbc_key.hidden
